@@ -23,6 +23,10 @@ class RainbowBlockVisualizer extends StatelessWidget {
         blockHeight: blockHeight,
         blockSpacing: blockSpacing,
         maxSample: maxSample,
+        highlightColor:
+            Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.2),
+        shadowColor:
+            Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.2),
       ),
       // Set size to match parent
       size: Size.infinite,
@@ -41,7 +45,12 @@ class AudioBlockPainter extends CustomPainter {
     required this.blockHeight,
     required this.blockSpacing,
     required this.maxSample,
+    required this.highlightColor,
+    required this.shadowColor,
   });
+
+  final Color highlightColor;
+  final Color shadowColor;
 
   int get dataLength => min(maxSample, data.length);
 
@@ -88,7 +97,7 @@ class AudioBlockPainter extends CustomPainter {
 
         // Add highlight effect (top-left)
         final highlightPaint = Paint()
-          ..color = Colors.white.withOpacity(0.2)
+          ..color = highlightColor
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1;
         canvas.drawLine(
@@ -104,7 +113,7 @@ class AudioBlockPainter extends CustomPainter {
 
         // Add shadow effect (bottom-right)
         final shadowPaint = Paint()
-          ..color = Colors.black.withOpacity(0.2)
+          ..color = shadowColor
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1;
         canvas.drawLine(

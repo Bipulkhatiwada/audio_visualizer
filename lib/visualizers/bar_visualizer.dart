@@ -15,7 +15,7 @@ class _BarVisualizerPainter extends CustomPainter {
     required this.color,
     this.gap = 2,
   }) : wavePaint = Paint()
-          ..color = color.withOpacity(1.0)
+          ..color = color.withValues(alpha: 1.0)
           ..style = PaintingStyle.fill;
 
   @override
@@ -50,24 +50,26 @@ class BarVisualizer extends StatelessWidget {
     super.key,
     required this.input,
     this.gap = 2,
-    this.color = Colors.blue,
-    this.backgroundColor = Colors.transparent,
+    this.color,
+    this.backgroundColor,
   });
 
-  final Color color;
-  final Color backgroundColor;
+  final Color? color;
+  final Color? backgroundColor;
   final int gap;
   final List<int> input;
 
   @override
   Widget build(BuildContext context) {
+    final effectiveColor = color ?? Theme.of(context).colorScheme.primary;
+    final effectiveBg = backgroundColor ?? Colors.transparent;
     return Container(
-      color: backgroundColor,
+      color: effectiveBg,
       child: CustomPaint(
         painter: _BarVisualizerPainter(
           data: input,
           gap: gap,
-          color: color,
+          color: effectiveColor,
         ),
       ),
     );

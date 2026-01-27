@@ -288,3 +288,53 @@ class PCMVisualizer extends ChangeNotifier implements AudioVisualizer {
 abstract class AudioVisualizer implements ChangeNotifier {
   AudioVisualizerValue get value;
 }
+
+class AudioSessionVisualizer extends ChangeNotifier implements AudioVisualizer {
+  static const MethodChannel _channel = MethodChannel('audio_visualizer');
+  static int _idCounter = 0;
+
+  final String playerId;
+  AudioVisualizerValue _value = AudioVisualizerValue();
+
+  AudioSessionVisualizer() : playerId = "session_visualizer_${_idCounter++}" {
+    _channel.setMethodCallHandler(_handleNativeCallback);
+  }
+
+  @override
+  AudioVisualizerValue get value => _value;
+
+  Future<void> attach(int sessionId) async {
+    await _channel.invokeMethod('attachToSession', {
+      "playerId": playerId,
+      "sessionId": sessionId,
+    });
+  }
+
+  Future<void> detach() async {
+    await _channel.invokeMethod('detachFromSession', {
+      "playerId": playerId,
+    });
+  }
+
+  @override
+  void dispose() {
+    detach();
+    super.dispose();
+  }
+
+  Future<void> _handleNativeCallback(MethodCall call) async {
+    if (call.arguments["playerId"] != playerId) return;
+
+    if (call.method == "onWaveformChanged") {
+      final buffer = call.arguments["waveform"] as List<dynamic>;
+      final waveform = List<int>.from(buffer.map((e) => e).toList());
+      _value = _value.copyWith(waveform: waveform);
+      notifyListeners();
+    } else if (call.method == "onFFTChanged") {
+      final buffer = call.arguments["fft"] as List<dynamic>;
+      final data = List<int>.from(buffer.map((e) => int8(e as int))).toList();
+      _value = _value.copyWith(fft: data);
+      notifyListeners();
+    }
+  }
+}

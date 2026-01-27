@@ -16,6 +16,7 @@ class AudioVisualizerPlugin : FlutterPlugin, MethodCallHandler {
 
     // Map to manage multiple MediaPlayer and Visualizer instances
     private val sessions = mutableMapOf<String, MiniAudioPlayer>()
+    private val externalSessions = mutableMapOf<String, ExternalVisualizer>()
 
 
     override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
@@ -66,6 +67,15 @@ class AudioVisualizerPlugin : FlutterPlugin, MethodCallHandler {
 
             "getState" -> {
                 getState(playerId, result)
+            }
+
+            "attachToSession" -> {
+                val sessionId = call.argument<Int>("sessionId") ?: 0
+                attachToSession(playerId, sessionId, result)
+            }
+
+            "detachFromSession" -> {
+                detachFromSession(playerId, result)
             }
 
             else -> {
@@ -177,6 +187,42 @@ class AudioVisualizerPlugin : FlutterPlugin, MethodCallHandler {
         } else {
             result.error("PLAYER_NOT_INITIALIZED", "Player not initialized for ID: $playerId", null)
         }
+    }
+
+    private fun attachToSession(playerId: String, sessionId: Int, result: Result) {
+        if (sessionId == 0) {
+            return result.error("INVALID_ARGUMENT", "sessionId must be non-zero", null)
+        }
+        
+        // Release existing if any
+        externalSessions[playerId]?.release()
+        
+        val callback = object : MiniAudioPlayerCallback {
+            override fun onWaveformData(playerId: String, data: ByteArray) {
+                channel.invokeMethod("onWaveformChanged", mapOf("playerId" to playerId, "waveform" to data))
+            }
+
+            override fun onFFTData(playerId: String, data: ByteArray) {
+                channel.invokeMethod("onFFTChanged", mapOf("playerId" to playerId, "fft" to data))
+            }
+
+            override fun onStateChanged(playerId: String) {
+                channel.invokeMethod("onStateChanged", mapOf("playerId" to playerId))
+            }
+        }
+        
+        try {
+            externalSessions[playerId] = ExternalVisualizer(playerId, sessionId, callback)
+            result.success(null)
+        } catch (e: Exception) {
+            result.error("VISUALIZER_ERROR", "Failed to attach visualizer: ${e.message}", null)
+        }
+    }
+
+    private fun detachFromSession(playerId: String, result: Result) {
+        externalSessions[playerId]?.release()
+        externalSessions.remove(playerId)
+        result.success(null)
     }
 
 }
