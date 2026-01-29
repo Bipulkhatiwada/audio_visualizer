@@ -12,34 +12,57 @@ class ExternalVisualizer(
 
     init {
         try {
-            mVisualizer = Visualizer(sessionId).apply {
-                captureSize = Visualizer.getCaptureSizeRange()[1]
-                setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
-                    override fun onWaveFormDataCapture(
-                        visualizer: Visualizer?,
-                        waveform: ByteArray?,
-                        samplingRate: Int
-                    ) {
-                        waveform?.let {
-                            callback.onWaveformData(playerId, wavelengthToWaveform(it))
-                        }
-                    }
+            // Try different capture sizes in case max size fails
+            val captureSizes = listOf(
+                Visualizer.getCaptureSizeRange()[1], // Maximum
+                1024,
+                512
+            )
+            
+            var visualizerCreated = false
+            for (size in captureSizes) {
+                try {
+                    mVisualizer = Visualizer(sessionId).apply {
+                        captureSize = size
+                        setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
+                            override fun onWaveFormDataCapture(
+                                visualizer: Visualizer?,
+                                waveform: ByteArray?,
+                                samplingRate: Int
+                            ) {
+                                waveform?.let {
+                                    callback.onWaveformData(playerId, wavelengthToWaveform(it))
+                                }
+                            }
 
-                    override fun onFftDataCapture(
-                        visualizer: Visualizer?,
-                        fft: ByteArray?,
-                        samplingRate: Int
-                    ) {
-                        fft?.let {
-                            callback.onFFTData(playerId, it)
-                        }
+                            override fun onFftDataCapture(
+                                visualizer: Visualizer?,
+                                fft: ByteArray?,
+                                samplingRate: Int
+                            ) {
+                                fft?.let {
+                                    callback.onFFTData(playerId, it)
+                                }
+                            }
+                        }, Visualizer.getMaxCaptureRate() / 2, true, true)
+                        enabled = true
                     }
-                }, Visualizer.getMaxCaptureRate() / 2, true, true)
-                enabled = true
+                    Log.d("ExternalVisualizer", "Visualizer attached to session $sessionId for player $playerId with captureSize=$size")
+                    visualizerCreated = true
+                    break
+                } catch (e: Exception) {
+                    Log.w("ExternalVisualizer", "Failed with captureSize=$size: ${e.message}")
+                    mVisualizer?.release()
+                    mVisualizer = null
+                }
             }
-            Log.d("ExternalVisualizer", "Visualizer attached to session $sessionId for player $playerId")
+            
+            if (!visualizerCreated) {
+                throw RuntimeException("Could not initialize visualizer with any capture size")
+            }
         } catch (e: Exception) {
             Log.e("ExternalVisualizer", "Error attaching visualizer: ${e.message}")
+            throw e
         }
     }
 
