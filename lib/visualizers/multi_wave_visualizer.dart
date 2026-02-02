@@ -8,14 +8,20 @@ class _MultiWaveVisualizer extends CustomPainter {
   final List<double> data;
   final Color color;
   final Paint wavePaint;
+  final double distortionIntensity;
+  final bool showMirror;
+  final double minimumAmplitude;
 
   _MultiWaveVisualizer({
     required this.data,
     required this.color,
+    this.distortionIntensity = 1.8,
+    this.showMirror = true,
+    this.minimumAmplitude = 0.15,
   }) : wavePaint = Paint()
           ..color = color.withValues(alpha: 1.0)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 3.0
+          ..strokeWidth = 2.5
           ..strokeCap = StrokeCap.round;
 
   @override
@@ -29,63 +35,139 @@ class _MultiWaveVisualizer extends CustomPainter {
     final midPoint = (data.length / 2).floor();
 
     // Create histograms for low and high frequencies
-    // Using dynamic bucket count based on available width
-    final bucketCount =
-        math.max((size.width / 20).floor(), 5); // Ensure minimum 5 buckets
+    // Using dynamic bucket count based on available width for smoother curves
+    final bucketCount = math.max((size.width / 15).floor(), 8);
 
     final histogramLow = _createHistogram(data, bucketCount, 0, midPoint);
     final histogramHigh =
         _createHistogram(data, bucketCount, midPoint, data.length);
 
-    // Render both histograms
-    _renderHistogram(canvas, size, histogramLow);
-    _renderHistogram(canvas, size, histogramHigh);
+    // Render low frequency wave (bottom wave)
+    _renderHistogram(canvas, size, histogramLow, isLowFreq: true);
+
+    // Render high frequency wave (top wave) with different characteristics
+    wavePaint.strokeWidth = 2.0;
+    _renderHistogram(canvas, size, histogramHigh, isLowFreq: false);
   }
 
-  void _renderHistogram(Canvas canvas, Size size, List<double> histogram) {
+  void _renderHistogram(Canvas canvas, Size size, List<double> histogram,
+      {required bool isLowFreq}) {
     if (histogram.isEmpty) return;
 
-    // If signal is effectively silent, don't draw (prevents static straight line)
+    // Check if there's actual signal variance (not just a flat line)
     final maxVal = histogram.reduce(math.max);
-    if (maxVal <= 0.01) return;
+    final minVal = histogram.reduce(math.min);
+    final variance = maxVal - minVal;
 
-    // Center the waveform vertically so it looks similar to the circular visualizer
+    // Don't draw if signal is too flat or too quiet
+    if (maxVal <= 0.01 || variance < 0.05) return;
+
+    // Center the waveform vertically
     final centerY = size.height / 2;
 
     // Calculate width per point to fit within canvas
     final pointsToGraph = histogram.length;
     final widthPerSample = size.width / (pointsToGraph - 1);
 
-    final points = List<double>.filled(pointsToGraph * 4, 0.0);
+    final points = <Offset>[];
 
-    // Create points for the smooth curve (mapped around center)
-    for (int i = 0; i < histogram.length - 1; ++i) {
-      points[i * 4] = (i * widthPerSample).clamp(0.0, size.width);
-      points[i * 4 + 1] =
-          (centerY - (histogram[i] * centerY)).clamp(0.0, size.height);
-      points[i * 4 + 2] = ((i + 1) * widthPerSample).clamp(0.0, size.width);
-      points[i * 4 + 3] =
-          (centerY - (histogram[i + 1] * centerY)).clamp(0.0, size.height);
+    // Create points for the smooth curve with enhanced distortion
+    for (int i = 0; i < histogram.length; i++) {
+      final x = (i * widthPerSample).clamp(0.0, size.width);
+
+      // Apply non-linear scaling for more dramatic effect
+      var amplitude = math.pow(histogram[i], 0.65).toDouble();
+
+      // Ensure minimum amplitude to prevent flat lines
+      amplitude = math.max(amplitude, minimumAmplitude);
+
+      // Add wave-like modulation based on position
+      final positionFactor = i / histogram.length;
+      final waveModulation = math.sin(positionFactor * math.pi * 3) * 0.2;
+
+      // Add frequency-specific characteristics
+      final freqModulation = isLowFreq
+          ? math.sin(positionFactor * math.pi * 5) *
+              0.15 // More waves for low freq
+          : math.cos(positionFactor * math.pi * 4) *
+              0.18; // Different pattern for high freq
+
+      // Combine all modulations
+      amplitude = (amplitude + waveModulation + freqModulation)
+          .clamp(minimumAmplitude, 1.0);
+
+      // Apply intensity multiplier
+      amplitude *= distortionIntensity;
+
+      // Add subtle randomization for organic feel
+      final random = math.Random(i * 100);
+      final randomFactor = 1.0 + (random.nextDouble() - 0.5) * 0.12;
+      amplitude *= randomFactor;
+
+      // Ensure amplitude stays above minimum threshold
+      amplitude = math.max(amplitude, minimumAmplitude);
+
+      // Calculate Y position (above center for positive, below for mirrored)
+      final y =
+          (centerY - (amplitude * centerY * 0.85)).clamp(0.0, size.height);
+
+      points.add(Offset(x, y));
     }
 
-    // Create and draw the path
-    Path path = Path();
-    path.moveTo(points[0], points[1]);
+    // Only draw if we have enough variation in the points
+    if (_hasSignificantVariation(points, centerY)) {
+      // Draw the main wave
+      _drawSmoothCurve(canvas, points);
 
-    // Calculate control point distance based on width
-    final controlPointDistance = widthPerSample * 0.5;
+      // Draw mirrored wave below center if enabled
+      if (showMirror) {
+        final mirroredPoints = points.map((p) {
+          final distanceFromCenter = centerY - p.dy;
+          return Offset(p.dx, centerY + distanceFromCenter);
+        }).toList();
 
-    for (int i = 2; i < points.length - 4; i += 2) {
-      path.cubicTo(
-          points[i - 2] + controlPointDistance,
-          points[i - 1],
-          points[i] - controlPointDistance,
-          points[i + 1],
-          points[i],
-          points[i + 1]);
+        _drawSmoothCurve(canvas, mirroredPoints);
+      }
+    }
+  }
+
+  bool _hasSignificantVariation(List<Offset> points, double centerY) {
+    if (points.length < 2) return false;
+
+    // Check if points deviate significantly from center
+    double maxDeviation = 0.0;
+    for (final point in points) {
+      final deviation = (point.dy - centerY).abs();
+      maxDeviation = math.max(maxDeviation, deviation);
+    }
+    
+    // Require at least 5% deviation from center
+    return maxDeviation > (centerY * 0.05);
+  }
+
+  void _drawSmoothCurve(Canvas canvas, List<Offset> points) {
+    if (points.length < 2) return;
+
+    final path = Path();
+    path.moveTo(points[0].dx, points[0].dy);
+
+    // Use Catmull-Rom spline for smoother curves
+    for (int i = 0; i < points.length - 1; i++) {
+      final p0 = i > 0 ? points[i - 1] : points[i];
+      final p1 = points[i];
+      final p2 = points[i + 1];
+      final p3 = i < points.length - 2 ? points[i + 2] : points[i + 1];
+
+      // Calculate control points for smooth bezier curve
+      final tension = 0.5;
+      final cp1x = p1.dx + (p2.dx - p0.dx) / 6 * tension;
+      final cp1y = p1.dy + (p2.dy - p0.dy) / 6 * tension;
+      final cp2x = p2.dx - (p3.dx - p1.dx) / 6 * tension;
+      final cp2y = p2.dy - (p3.dy - p1.dy) / 6 * tension;
+
+      path.cubicTo(cp1x, cp1y, cp2x, cp2y, p2.dx, p2.dy);
     }
 
-    // Draw just the wave line without filling
     canvas.drawPath(path, wavePaint);
   }
 
@@ -101,7 +183,7 @@ class _MultiWaveVisualizer extends CustomPainter {
     List<double> histogram = List<double>.filled(bucketCount, 0.0);
     double maxValue = 0.0;
 
-    // Calculate histogram values and find maximum
+    // Calculate histogram values with weighted averaging
     for (int i = 0; i < bucketCount; i++) {
       double sum = 0.0;
       int count = 0;
@@ -110,7 +192,11 @@ class _MultiWaveVisualizer extends CustomPainter {
         final idx = start + (i * samplesPerBucket) + j;
         if (idx < end) {
           // Convert from [0-255] to [0-1] range
-          sum += samples[idx] / 255.0;
+          final value = samples[idx] / 255.0;
+
+          // Apply emphasis to higher values for better visibility
+          final emphasized = math.pow(value, 0.8).toDouble();
+          sum += emphasized;
           count++;
         }
       }
@@ -128,7 +214,26 @@ class _MultiWaveVisualizer extends CustomPainter {
       }
     }
 
+    // Apply smoothing to reduce jitter
+    histogram = _smoothHistogram(histogram);
+
     return histogram;
+  }
+
+  List<double> _smoothHistogram(List<double> data) {
+    if (data.length < 3) return data;
+
+    final smoothed = List<double>.filled(data.length, 0.0);
+
+    // Simple moving average
+    smoothed[0] = data[0];
+    smoothed[data.length - 1] = data[data.length - 1];
+
+    for (int i = 1; i < data.length - 1; i++) {
+      smoothed[i] = (data[i - 1] + data[i] * 2 + data[i + 1]) / 4;
+    }
+
+    return smoothed;
   }
 
   @override
@@ -144,12 +249,18 @@ class MultiWaveVisualizer extends StatelessWidget {
     this.gap = 2,
     this.color,
     this.backgroundColor,
+    this.distortionIntensity = 1.8,
+    this.showMirror = true,
+    this.minimumAmplitude = 0.15,
   });
 
   final Color? color;
   final Color? backgroundColor;
   final int gap;
   final List<int> input;
+  final double distortionIntensity;
+  final bool showMirror;
+  final double minimumAmplitude;
 
   @override
   Widget build(BuildContext context) {
@@ -161,6 +272,9 @@ class MultiWaveVisualizer extends StatelessWidget {
         painter: _MultiWaveVisualizer(
           data: input.map((e) => e.toDouble()).toList(),
           color: effectiveColor,
+          distortionIntensity: distortionIntensity,
+          showMirror: showMirror,
+          minimumAmplitude: minimumAmplitude,
         ),
       ),
     );
