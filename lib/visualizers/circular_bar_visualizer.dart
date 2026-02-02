@@ -3,7 +3,6 @@
 
 import 'dart:math';
 import 'dart:typed_data';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
@@ -34,21 +33,22 @@ class _CircularBarVisualizer extends CustomPainter {
       double minDimension = size.height < size.width ? size.height : size.width;
       // Use 1/3 of the minimum dimension for the base circle radius
       // This leaves room for the amplitude bars to stay within bounds
-      radius = minDimension / 6;
-      double circumference = 2 * pi * radius;
-      wavePaint.strokeWidth = circumference / (data.length * 2);
+      radius = minDimension / 3.2; // Slightly smaller to leave room for artwork
+      wavePaint.strokeWidth = 4.0; // Thicker indicators
+      wavePaint.strokeCap = StrokeCap.round;
       wavePaint.style = PaintingStyle.stroke;
     }
 
     // Center point
     final center = Offset(size.width / 2, size.height / 2);
 
-    // Draw base circle
+    // Draw base circle indicator (very subtle)
     canvas.drawCircle(
       center,
       radius.toDouble(),
-      wavePaint,
+      wavePaint..color = color.withValues(alpha: 0.1),
     );
+    wavePaint.color = color;
 
     if (points == null || points!.length < data.length * 4) {
       points = Float32List(data.length * 4);
@@ -62,11 +62,13 @@ class _CircularBarVisualizer extends CustomPainter {
     double angleIncrement = 360 / data.length;
 
     // Calculate maximum safe amplitude that won't exceed canvas bounds
-    // This ensures bars won't extend beyond the smaller dimension of the canvas
     double maxAmplitude = min(
-        (size.width / 2 - radius) * 0.8, // 80% of available width space
-        (size.height / 2 - radius) * 0.8 // 80% of available height space
+        (size.width / 2 - radius) * 0.9, (size.height / 2 - radius) * 0.9
         );
+
+    final indicatorPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
 
     for (int i = 0; i < data.length; i++) {
       // Scale the value relative to the maximum value and the safe amplitude
@@ -79,17 +81,26 @@ class _CircularBarVisualizer extends CustomPainter {
       double sinAngle = sin(angleRad);
 
       // Start point (on the base circle)
-      points![i * 4] = center.dx + radius * cosAngle;
-      points![i * 4 + 1] = center.dy + radius * sinAngle;
+      double startX = center.dx + radius * cosAngle;
+      double startY = center.dy + radius * sinAngle;
 
       // End point (extended by bar height)
-      points![i * 4 + 2] = center.dx + (radius + barHeight) * cosAngle;
-      points![i * 4 + 3] = center.dy + (radius + barHeight) * sinAngle;
+      double endX = center.dx + (radius + barHeight) * cosAngle;
+      double endY = center.dy + (radius + barHeight) * sinAngle;
+
+      // Draw the "thick circular" indicator
+      // Instead of lines, we draw rounded lines or circles at the tips
+      canvas.drawLine(
+        Offset(startX, startY),
+        Offset(endX, endY),
+        wavePaint..strokeWidth = 3.0,
+      );
+
+      // Draw a small circle at the tip to make it "circular"
+      canvas.drawCircle(Offset(endX, endY), 2.5, indicatorPaint);
 
       angle += angleIncrement;
     }
-
-    canvas.drawRawPoints(PointMode.lines, points!, wavePaint);
   }
 
   @override

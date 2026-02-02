@@ -13,8 +13,10 @@ class _MultiWaveVisualizer extends CustomPainter {
     required this.data,
     required this.color,
   }) : wavePaint = Paint()
-          ..color = color.withValues(alpha: 0.75)
-          ..style = PaintingStyle.fill;
+          ..color = color.withValues(alpha: 1.0)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.0
+          ..strokeCap = StrokeCap.round;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -43,26 +45,32 @@ class _MultiWaveVisualizer extends CustomPainter {
   void _renderHistogram(Canvas canvas, Size size, List<double> histogram) {
     if (histogram.isEmpty) return;
 
+    // If signal is effectively silent, don't draw (prevents static straight line)
+    final maxVal = histogram.reduce(math.max);
+    if (maxVal <= 0.01) return;
+
+    // Center the waveform vertically so it looks similar to the circular visualizer
+    final centerY = size.height / 2;
+
     // Calculate width per point to fit within canvas
     final pointsToGraph = histogram.length;
     final widthPerSample = size.width / (pointsToGraph - 1);
 
     final points = List<double>.filled(pointsToGraph * 4, 0.0);
 
-    // Create points for the smooth curve
+    // Create points for the smooth curve (mapped around center)
     for (int i = 0; i < histogram.length - 1; ++i) {
       points[i * 4] = (i * widthPerSample).clamp(0.0, size.width);
       points[i * 4 + 1] =
-          (size.height * (1 - histogram[i])).clamp(0.0, size.height);
+          (centerY - (histogram[i] * centerY)).clamp(0.0, size.height);
       points[i * 4 + 2] = ((i + 1) * widthPerSample).clamp(0.0, size.width);
       points[i * 4 + 3] =
-          (size.height * (1 - histogram[i + 1])).clamp(0.0, size.height);
+          (centerY - (histogram[i + 1] * centerY)).clamp(0.0, size.height);
     }
 
     // Create and draw the path
     Path path = Path();
-    path.moveTo(0.0, size.height);
-    path.lineTo(points[0], points[1]);
+    path.moveTo(points[0], points[1]);
 
     // Calculate control point distance based on width
     final controlPointDistance = widthPerSample * 0.5;
@@ -77,10 +85,7 @@ class _MultiWaveVisualizer extends CustomPainter {
           points[i + 1]);
     }
 
-    // Complete the path
-    path.lineTo(size.width, size.height);
-    path.close();
-
+    // Draw just the wave line without filling
     canvas.drawPath(path, wavePaint);
   }
 

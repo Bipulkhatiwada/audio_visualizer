@@ -23,6 +23,7 @@ class _LineBarVisualizer extends CustomPainter {
     if (data.isEmpty) return;
 
     // Calculate the maximum number of bars that can fit in the width
+    // We'll use half width for each side of center
     final maxBars = (size.width / (gap + 1)).floor();
     final density = math.min(data.length, maxBars);
 
@@ -38,12 +39,14 @@ class _LineBarVisualizer extends CustomPainter {
     // Find maximum amplitude for scaling
     final maxAmplitude = math.max(1, data.reduce(math.max));
 
-    // Calculate half height for center line
+    // Calculate center positions
     final centerY = size.height / 2;
+    final centerX = size.width / 2;
 
     // Calculate maximum possible amplitude in pixels (half of available height)
     final maxPixelAmplitude = centerY;
 
+    // Draw bars spreading from center outward
     for (int i = 0; i < density; i++) {
       // Calculate the data index, ensuring we don't exceed array bounds
       final dataIndex =
@@ -53,8 +56,12 @@ class _LineBarVisualizer extends CustomPainter {
       final scaledAmplitude =
           (data[dataIndex] / maxAmplitude) * maxPixelAmplitude;
 
-      // Calculate bar position
-      final barX = (i * barWidth) + (barWidth / 2);
+      // Calculate position offset from center
+      // Spread bars symmetrically: odd indices go right, even go left
+      final distanceFromCenter = ((i + 1) / 2).floor() * barWidth;
+      final barX = i % 2 == 0
+          ? centerX - distanceFromCenter
+          : centerX + distanceFromCenter;
 
       // Calculate top and bottom points, ensuring they stay within bounds
       final top = (centerY - scaledAmplitude).clamp(0.0, size.height);
