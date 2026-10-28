@@ -1,27 +1,48 @@
-// import 'package:flutter/services.dart';
-// import 'package:flutter_test/flutter_test.dart';
-// import 'package:audio_visualizer/audio_visualizer_method_channel.dart';
-//
-// void main() {
-//   TestWidgetsFlutterBinding.ensureInitialized();
-//
-//   MethodChannelAudioVisualizer platform = MethodChannelAudioVisualizer();
-//   const MethodChannel channel = MethodChannel('audio_visualizer');
-//
-//   setUp(() {
-//     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-//       channel,
-//       (MethodCall methodCall) async {
-//         return '42';
-//       },
-//     );
-//   });
-//
-//   tearDown(() {
-//     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
-//   });
-//
-//   test('getPlatformVersion', () async {
-//     expect(await platform.getPlatformVersion(), '42');
-//   });
-// }
+import 'package:audio_visualizer/audio_visualizer.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  const channel = MethodChannel('audio_visualizer');
+
+  setUp(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (MethodCall methodCall) async {
+      switch (methodCall.method) {
+        case 'getState':
+          return {
+            'duration': 1000,
+            'position': 250,
+            'loaded': true,
+            'status': 'playing',
+          };
+        default:
+          return null;
+      }
+    });
+  });
+
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null);
+  });
+
+  test('initialize marks player as initialized', () async {
+    final player = VisualizerPlayer();
+
+    await player.initialize();
+
+    expect(player.value.initialized, isTrue);
+    player.dispose();
+  });
+
+  test('player ids are unique per instance', () {
+    final a = VisualizerPlayer();
+    final b = VisualizerPlayer();
+
+    expect(a.playerId, isNot(equals(b.playerId)));
+    a.dispose();
+    b.dispose();
+  });
+}

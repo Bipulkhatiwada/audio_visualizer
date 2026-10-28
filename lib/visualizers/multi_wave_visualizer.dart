@@ -159,7 +159,7 @@ class _MultiWaveVisualizer extends CustomPainter {
       final p3 = i < points.length - 2 ? points[i + 2] : points[i + 1];
 
       // Calculate control points for smooth bezier curve
-      final tension = 0.5;
+      const tension = 0.5;
       final cp1x = p1.dx + (p2.dx - p0.dx) / 6 * tension;
       final cp1y = p1.dy + (p2.dy - p0.dy) / 6 * tension;
       final cp2x = p2.dx - (p3.dx - p1.dx) / 6 * tension;

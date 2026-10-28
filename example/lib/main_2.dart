@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:audio_visualizer/utils.dart';
-import 'package:audio_visualizer/visualizers/audio_spectrum.dart';
 import 'package:audio_visualizer/visualizers/visualizers.dart';
 import 'package:flutter/material.dart';
 import 'package:audio_visualizer/audio_visualizer.dart';
